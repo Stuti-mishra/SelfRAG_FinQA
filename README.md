@@ -38,4 +38,17 @@ This repository contains the implementation of the **Self-Retrieval-Augmented Ge
 ---
 
 ## Installation
+Please use the latest version of `vllm`, as the older version may not enable you to set `skip_special_tokens` via `SamplingParam`, which is added by ([this PR](https://github.com/vllm-project/vllm/issues/893)).
+
+You can create the conda environment by running the command below.
+
+```
+conda env create -f environment.yml
+```
+Flash attention should be installed separately - follow setup.sh
+
+
+
+
+
 
