@@ -47,6 +47,31 @@ conda env create -f environment.yml
 ```
 Flash attention should be installed separately - follow setup.sh
 
+---
+
+## Jobs Folder
+
+The `jobs/` directory contains all Slurm job submission scripts used to run experiments on the NYU HPC cluster. Each script corresponds to specific stages of the pipeline, such as passage embedding generation, retrieval, fine-tuning, and inference.
+
+---
+---
+
+## Retrieval
+
+### Generate Embeddings for Your Own Data
+
+You can generate embeddings for your custom data using the script adapted from the [Contriever repository](https://github.com/facebookresearch/contriever). This process is computationally intensive for large datasets and is optimized for multi-GPU setups.
+
+```bash
+cd retrieval_lm
+for i in {0..3}; do
+  export CUDA_VISIBLE_DEVICES=${i}
+  python generate_passage_embeddings.py  --model_name_or_path facebook/contriever-msmarco \
+  --output_dir YOUR_OUTPUT_DIR \
+  --passages YOUR_PASSAGE_DATA --shard_id ${i}  --num_shards 4 > ./log/nohup.my_embeddings.${i} 2>&1 &
+done
+
+
 
 
 
