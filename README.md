@@ -56,24 +56,160 @@ The `jobs/` directory contains all Slurm job submission scripts used to run expe
 ---
 ---
 
-## Retrieval
 
-### Generate Embeddings for Your Own Data
+# Self-Retrieval-Augmented Generation (Self-RAG) in Finance
 
-You can generate embeddings for your custom data using the script adapted from the [Contriever repository](https://github.com/facebookresearch/contriever). This process is computationally intensive for large datasets and is optimized for multi-GPU setups.
+## Run Retriever
+
+Retrieve passages relevant to your queries using the following command. This script is tailored for the FinQA dataset, and specific job scripts are available in the `jobs/` folder for this setup.
 
 ```bash
 cd retrieval_lm
-for i in {0..3}; do
-  export CUDA_VISIBLE_DEVICES=${i}
-  python generate_passage_embeddings.py  --model_name_or_path facebook/contriever-msmarco \
-  --output_dir YOUR_OUTPUT_DIR \
-  --passages YOUR_PASSAGE_DATA --shard_id ${i}  --num_shards 4 > ./log/nohup.my_embeddings.${i} 2>&1 &
-done
+python passage_retrieval.py \
+    --model_name_or_path facebook/contriever-msmarco --passages psgs_w100.tsv \
+    --passages_embeddings "wikipedia_embeddings/*" \
+    --data YOUR_INPUT_FILE  \
+    --output_dir YOUR_OUTPUT_FILE \
+    --n_docs 20
+```
+
+- **Input file format**: JSON/JSONL, containing fields `question` or `instruction` for retrieval queries.
+
+---
+
+## Fine-Tuning the Model Using Self-RAG Scheme
+
+### Fine-Tuning Scripts
+
+Fine-tune the model with financial data using scripts like `finetune.py` and `qlora_finetune.py` in the `retrieval_lm` directory. Refer to job scripts in the `jobs/` folder for specific configurations.
+
+**Example fine-tuning command**:
+
+```bash
+python finetune.py \
+    --model_name_or_path meta-llama/Llama-2-7b-hf \
+    --use_flash_attn \
+    --tokenizer_name meta-llama/Llama-2-7b-hf \
+    --use_slow_tokenizer \
+    --train_file train.jsonl \
+    --max_seq_length 2048 \
+    --preprocessing_num_workers 16 \
+    --per_device_train_batch_size $BATCH_SIZE_PER_GPU \
+    --gradient_accumulation_steps $GRADIENT_ACC_STEPS \
+    --learning_rate 2e-5 \
+    --lr_scheduler_type linear \
+    --warmup_ratio 0.03 \
+    --weight_decay 0. \
+    --num_train_epochs 3 \
+    --output_dir output/self_rag_{} \
+    --with_tracking \
+    --report_to tensorboard \
+    --logging_steps 1 \
+    --use_special_tokens
+```
+
+The fine-tuned model incorporates financial reasoning and ensures better factual accuracy for domain-specific tasks.
+
+---
+
+## Inference
+
+### Zero-Shot Testing on FinQA
+
+For inference, we use FinQA as a zero-shot evaluation dataset. The input JSONL file must contain `query`, `answers`, and `retrieved_passages` in context.
+
+#### Retrieve Passages
+
+Follow the retrieval steps in the previous section to prepare the context.
+
+#### Run Inference
+
+Run the following command to generate predictions and evaluate accuracy:
+
+```bash
+cd retrieval_lm
+python run_short_form.py \
+    --model_name "selfrag/selfrag_llama2_7b" \
+    --input_file "path/to/input/jsonl" \
+    --output_file "path/to/output" \
+    --task "finqa" \
+    --max_new_tokens 100 \
+    --tokenizer_path "" \
+    --download_dir "path/to/model" \
+    --ndocs 5 \
+    --world_size 1 \
+    --dtype "bfloat16" \
+    --use_seqscore \
+    --w_rel 1.0 \
+    --w_sup 1.0 \
+    --w_use 0.5 \
+    --mode "always_retrieve" \
+    --use_groundness \
+    --use_utility \
+    --use_seqscore
+```
+
+- Outputs will include metrics such as:
+  - **Exact Match (EM) Accuracy**
+  - **F1 Score**
+  - **Numerical Accuracy**
+- Metrics have been adapted for the FinQA task.
 
 
+---
 
+### Results
 
+Our implementation significantly reduced hallucinations compared to baseline models, errors in numerical reasoning and factual accuracy persisted, highlighting the need for further refinement.
 
+---
+
+### Limitations and Future Work
+
+#### Limitations
+
+1. **Compute Resources**:  
+   Our implementation and experiments were conducted on a single A100 GPU (40GB). This limited our ability to scale training for larger datasets and models. In contrast, the original Self-RAG framework utilized 4 to 8 A100 GPUs, enabling more extensive training.
+
+2. **Complexity of Financial Data**:  
+   Financial data is inherently complex, containing domain-specific terminology, multi-step reasoning, and numerical reasoning requirements. This complexity means that the dataset used for fine-tuning may not be sufficient to fully capture the nuances of financial question answering tasks. The model requires additional training to achieve better performance.
+
+---
+
+#### Future Work
+
+1. **Train Larger Models on the Self-RAG Framework**:  
+   Extending the framework to train larger models, such as 13B or 70B parameters, could lead to improved reasoning and contextual understanding, particularly in complex domains like finance.
+
+2. **Explore Multi-Task Learning**:  
+   Incorporate multi-task learning to fine-tune the model simultaneously on multiple related datasets, such as financial summarization, report generation, and QA tasks, to improve generalization.
+
+3. **Incorporate Advanced Fine-Tuning Techniques**:  
+   Techniques like reinforcement learning with human feedback (RLHF) could be used to improve factual grounding and relevance of responses. This would allow the model to better align with user expectations in the financial domain.
+
+---
+### Attribution
+
+This project builds upon the following repositories and publications:
+
+- **Self-RAG Repository**:  
+  Original implementation of Self-RAG: [https://github.com/AkariAsai/self-rag](https://github.com/AkariAsai/self-rag)  
+  [oai_citation_attribution:2‡GitHub](https://github.com/AkariAsai/self-rag?utm_source=chatgpt.com)
+
+- **Contriever Repository**:  
+  Code for passage embedding generation: [https://github.com/facebookresearch/contriever](https://github.com/facebookresearch/contriever)  
+  
+
+- **Self-RAG Paper**:  
+  "Self-RAG:ve, Generate, and Critique through Self-Reflection"  
+  [https://arxiv.org/abs/2310.11511](https://arxiv.org/abs/2310.11511)  
+  [oai_citation_attribution:1‡arXiv](https://arxiv.org/abs/2310.11511?utm_source=chatgpt.com)
+
+- **FinQA Paper**:  
+  "FinQA: A Dataset of Numerical Reasoning over Financial Data"  
+  [https://arxiv.org/abs/2109.00122](https://arxiv.org/abs/2109.00122)  
+  [oai_citation_attribution:0‡arXiv](https://arxiv.org/abs/2109.00122?utm_source=chatgpt.com)
+
+We acknowledge the authors and contributors of these works for their foundational efforts in advancing research in retrieval-augmented generation and financial question answering.
 
 
