@@ -54,10 +54,6 @@ Flash attention should be installed separately - follow setup.sh
 The `jobs/` directory contains all Slurm job submission scripts used to run experiments on the NYU HPC cluster. Each script corresponds to specific stages of the pipeline, such as passage embedding generation, retrieval, fine-tuning, and inference.
 
 ---
----
-
-
-# Self-Retrieval-Augmented Generation (Self-RAG) in Finance
 
 ## Run Retriever
 
